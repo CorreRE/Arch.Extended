@@ -18,8 +18,8 @@
         <RepositoryUrl>https://github.com/CorreRE/Arch.Extended.git</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageTags>c#;.net;.net6;.net7;ecs;game;entity;gamedev; game-development; game-engine; entity-component-system; arch;</PackageTags>
-        <PackageReleaseNotes>Replaced Utf8Json with System.Text.Json.</PackageReleaseNotes>
-        <Version>2.1.1</Version>
+        <PackageReleaseNotes>Component types are now resolved from their persisted type name, so a world can be restored no matter in which order the components are registered in the current process. Persisted component ids are ignored and the archetype lookup is rebuilt from the resolved signature.</PackageReleaseNotes>
+        <Version>2.1.2</Version>
         <SatelliteResourceLanguages>en-US</SatelliteResourceLanguages>
 
         <UnityPublish>true</UnityPublish>

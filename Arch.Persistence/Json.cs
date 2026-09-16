@@ -5,6 +5,7 @@ using Arch.Core.Utils;
 using Arch.LowLevel.Jagged;
 using CommunityToolkit.HighPerformance;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 
 namespace Arch.Persistence;
 
@@ -201,6 +202,11 @@ public partial class ArrayFormatter : IJsonFormatter<Array>
         var size = reader.ReadUInt32();
         reader.ReadIsValueSeparator();
 
+        if (type is null)
+        {
+            throw new JsonException("The persisted data contains a component array without a resolvable element type.");
+        }
+
         // Create array
         var array = Array.CreateInstance(type, size);
 
@@ -315,21 +321,40 @@ public partial class ComponentTypeFormatter : IJsonFormatter<ComponentType>
     {
         reader.ReadIsBeginObject();
 
+        // Read the persisted id and byte size. Both are ignored, the id is assigned in registration order and
+        // therefore differs between processes, the byte size is taken from the resolved type instead.
         reader.ReadPropertyName();
-        var id = reader.ReadUInt32();
+        reader.ReadUInt32();
         reader.ReadIsValueSeparator();
 
         reader.ReadPropertyName();
-        var bytesize = reader.ReadUInt32();
+        reader.ReadUInt32();
         reader.ReadIsValueSeparator();
 
-        // Read the runtime type name.
-        reader.ReadPropertyName();
-        reader.ReadString();
+        // Read the runtime type name, which is the only reliable way to restore the component type.
+        string? typeName = null;
+        if (!reader.IsEndObject())
+        {
+            reader.ReadPropertyName();
+            typeName = reader.ReadString();
+        }
 
         reader.ReadIsEndObject();
 
-        return new ComponentType((int)id, (int)bytesize);
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            throw new JsonException(
+                "The persisted data does not contain component type names and was probably written by Arch.Persistence 2.1.0 or earlier. " +
+                "Its component ids cannot be mapped to types of the current process, persist the data again with the current version.");
+        }
+
+        var type = TypeResolver.Resolve(typeName);
+        if (type is null)
+        {
+            throw new JsonException($"Could not resolve the persisted component type '{typeName}'.");
+        }
+
+        return (ComponentType)type;
     }
 }
 
@@ -661,8 +686,11 @@ public partial class ArchetypeFormatter : IJsonFormatter<Archetype>
         reader.ReadIsValueSeparator();
 
         // Archetype lookup array
+        // The persisted lookup array maps the component ids of the process that wrote the file to their array index.
+        // Component ids are assigned in registration order and therefore differ from the current process, which is why
+        // the value is read to stay in sync with the stream but not used. The archetype derives it from the resolved types below.
         reader.ReadPropertyName();
-        var lookupArray = JsonSerializer.Deserialize<int[]>(ref reader, formatterResolver);
+        JsonSerializer.Deserialize<int[]>(ref reader, formatterResolver);
         reader.ReadIsValueSeparator();
 
         // Archetype chunk size and list
@@ -680,7 +708,7 @@ public partial class ArchetypeFormatter : IJsonFormatter<Archetype>
         chunkFormatter!.World = World;
         chunkFormatter.Archetype = archetype;
         chunkFormatter.Signature = types;
-        chunkFormatter.LookupArray = lookupArray;
+        chunkFormatter.LookupArray = archetype.GetLookupArray();
 
         // Deserialise each chunk and put it into the archetype. 
         reader.ReadPropertyName();
@@ -816,7 +844,15 @@ public partial class ChunkFormatter : IJsonFormatter<Chunk>
         {
             // Read array of the type
             var array = JsonSerializer.Deserialize<Array>(ref reader, formatterResolver);
-            var chunkArray = chunk.GetArray(array.GetType().GetElementType()!);
+            var elementType = (ComponentType)array.GetType().GetElementType()!;
+
+            // The component has to be part of this archetype, otherwise the lookup array cannot provide a valid index.
+            if (!chunk.Has(elementType))
+            {
+                throw new JsonException($"The persisted component array '{elementType.Type.Name}' is not part of the archetype it was stored in.");
+            }
+
+            var chunkArray = chunk.GetArray(elementType);
             Array.Copy(array, chunkArray, (int)size);
             reader.ReadIsValueSeparator();
         }
