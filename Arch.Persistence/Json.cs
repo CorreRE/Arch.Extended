@@ -5,7 +5,6 @@ using Arch.Core.Utils;
 using Arch.LowLevel.Jagged;
 using CommunityToolkit.HighPerformance;
 using System.Runtime.CompilerServices;
-using Utf8Json;
 
 namespace Arch.Persistence;
 
@@ -55,7 +54,7 @@ public partial class SingleEntityFormatter : IJsonFormatter<Entity>
             // Write type
             writer.WriteBeginObject();
             writer.WritePropertyName("type");
-            JsonSerializer.Serialize(ref writer, type);
+            JsonSerializer.Serialize(ref writer, type, formatterResolver);
             writer.WriteValueSeparator();
 
             // Write component
@@ -107,7 +106,7 @@ public partial class SingleEntityFormatter : IJsonFormatter<Entity>
 
             // Read type
             reader.ReadPropertyName();
-            var type = JsonSerializer.Deserialize<ComponentType>(ref reader);
+            var type = JsonSerializer.Deserialize<ComponentType>(ref reader, formatterResolver);
             reader.ReadIsValueSeparator();
 
             reader.ReadPropertyName();
@@ -302,6 +301,11 @@ public partial class ComponentTypeFormatter : IJsonFormatter<ComponentType>
         // Write bytesize
         writer.WritePropertyName("byteSize");
         writer.WriteUInt32((uint)value.ByteSize);
+        writer.WriteValueSeparator();
+
+        // Write runtime type
+        writer.WritePropertyName("typeName");
+        writer.WriteString(value.Type.AssemblyQualifiedName);
 
         writer.WriteEndObject();
     }
@@ -318,6 +322,10 @@ public partial class ComponentTypeFormatter : IJsonFormatter<ComponentType>
         reader.ReadPropertyName();
         var bytesize = reader.ReadUInt32();
         reader.ReadIsValueSeparator();
+
+        // Read the runtime type name.
+        reader.ReadPropertyName();
+        reader.ReadString();
 
         reader.ReadIsEndObject();
 

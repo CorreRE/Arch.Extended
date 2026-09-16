@@ -6,7 +6,6 @@ using Arch.LowLevel.Jagged;
 using MessagePack;
 using MessagePack.Formatters;
 using System.Runtime.CompilerServices;
-using Utf8Json;
 
 namespace Arch.Persistence;
 
@@ -15,6 +14,7 @@ namespace Arch.Persistence;
 ///     The <see cref="SingleEntityFormatter"/> class
 ///     is a <see cref="IJsonFormatter"/> to (de)serialize a single <see cref="Entity"/>to or from json.
 /// </summary>
+[ExcludeFormatterFromSourceGeneratedResolver]
 public partial class SingleEntityFormatter : IMessagePackFormatter<Entity>
 {
 
@@ -105,11 +105,17 @@ public partial class EntityFormatter : IMessagePackFormatter<Entity>
 ///     The <see cref="ArrayFormatter"/> class
 ///     is a <see cref="IJsonFormatter{Array}"/> to (de)serialize <see cref="Array"/>s to or from json.
 /// </summary>
-public partial class ArrayFormatter : IMessagePackFormatter<Array>
+public partial class ArrayFormatter : IMessagePackFormatter<Array?>
 {
     /// <inheritdoc cref="IMessagePackFormatter{T}.Serialize"/>
-    public void Serialize(ref MessagePackWriter writer, Array value, MessagePackSerializerOptions options)
+    public void Serialize(ref MessagePackWriter writer, Array? value, MessagePackSerializerOptions options)
     {
+        if (value is null)
+        {
+            writer.WriteNil();
+            return;
+        }
+
         var type = value.GetType().GetElementType();
 
         // Write type and size
@@ -125,8 +131,13 @@ public partial class ArrayFormatter : IMessagePackFormatter<Array>
     }
 
     /// <inheritdoc cref="IMessagePackFormatter{T}.Deserialize"/>
-    public Array Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    public Array? Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
     {
+        if (reader.TryReadNil())
+        {
+            return null;
+        }
+
         // Write type and size
         var type = MessagePackSerializer.Deserialize<Type>(ref reader, options);
         var size = reader.ReadUInt32();
@@ -149,7 +160,7 @@ public partial class ArrayFormatter : IMessagePackFormatter<Array>
 ///     (de)serializes a <see cref="JaggedArray{T}"/>.
 /// </summary>
 /// <typeparam name="T">The type stored in the <see cref="JaggedArray{T}"/>.</typeparam>
-public partial class JaggedArrayFormatter<T> : IMessagePackFormatter<JaggedArray<T>>
+public partial class JaggedArrayFormatter<T> : IMessagePackFormatter<JaggedArray<T>?>
 {
     private const int CpuL1CacheSize = 16_384;
     private readonly T _filler;
@@ -163,9 +174,22 @@ public partial class JaggedArrayFormatter<T> : IMessagePackFormatter<JaggedArray
         _filler = filler;
     }
 
-    /// <inheritdoc cref="IMessagePackFormatter{T}.Serialize"/>
-    public void Serialize(ref MessagePackWriter writer, JaggedArray<T> value, MessagePackSerializerOptions options)
+    /// <summary>
+    /// Initializes a formatter with the default filler value.
+    /// </summary>
+    public JaggedArrayFormatter() : this(default!)
     {
+    }
+
+    /// <inheritdoc cref="IMessagePackFormatter{T}.Serialize"/>
+    public void Serialize(ref MessagePackWriter writer, JaggedArray<T>? value, MessagePackSerializerOptions options)
+    {
+        if (value is null)
+        {
+            writer.WriteNil();
+            return;
+        }
+
         // Write length/capacity and items
         writer.WriteInt32(value.Capacity);
         for (var index = 0; index < value.Capacity; index++)
@@ -176,8 +200,13 @@ public partial class JaggedArrayFormatter<T> : IMessagePackFormatter<JaggedArray
     }
 
     /// <inheritdoc cref="IMessagePackFormatter{T}.Deserialize"/>
-    public JaggedArray<T> Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    public JaggedArray<T>? Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
     {
+        if (reader.TryReadNil())
+        {
+            return null;
+        }
+
         var capacity = reader.ReadInt32();
         var jaggedArray = new JaggedArray<T>(CpuL1CacheSize / Unsafe.SizeOf<T>(), _filler,capacity);
 
@@ -288,11 +317,17 @@ public partial class EntitySlotFormatter : IMessagePackFormatter<EntityData>
 ///     The <see cref="WorldFormatter"/> class
 ///     is a <see cref="IJsonFormatter{World}"/> to (de)serialize <see cref="World"/>s to or from json.
 /// </summary>
-public partial class WorldFormatter : IMessagePackFormatter<World>
+public partial class WorldFormatter : IMessagePackFormatter<World?>
 {
     /// <inheritdoc cref="IMessagePackFormatter{T}.Serialize"/>
-    public void Serialize(ref MessagePackWriter writer, World value, MessagePackSerializerOptions options)
+    public void Serialize(ref MessagePackWriter writer, World? value, MessagePackSerializerOptions options)
     {
+        if (value is null)
+        {
+            writer.WriteNil();
+            return;
+        }
+
         // Write important meta data
         writer.WriteUInt32((uint)value.BaseChunkSize);
         writer.WriteUInt32((uint)value.BaseChunkEntityCount);
@@ -313,8 +348,13 @@ public partial class WorldFormatter : IMessagePackFormatter<World>
     }
 
     /// <inheritdoc cref="IMessagePackFormatter{T}.Deserialize"/>
-    public World Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    public World? Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
     {
+        if (reader.TryReadNil())
+        {
+            return null;
+        }
+
         // Read important metadata
         var baseChunkSize= reader.ReadUInt32();
         var baseChunkEntityCount = reader.ReadUInt32();
@@ -344,7 +384,7 @@ public partial class WorldFormatter : IMessagePackFormatter<World>
         for (var index = 0; index < size; index++)
         {
             var archetype = archetypeFormatter.Deserialize(ref reader, options);
-            archetypes.Add(archetype);
+            archetypes.Add(archetype!);
         }
         
         // Set archetypes
@@ -358,11 +398,17 @@ public partial class WorldFormatter : IMessagePackFormatter<World>
 ///     The <see cref="ArchetypeFormatter"/> class
 ///     is a <see cref="IJsonFormatter{Archetype}"/> to (de)serialize <see cref="Archetype"/>s to or from json.
 /// </summary>
-public partial class ArchetypeFormatter : IMessagePackFormatter<Archetype>
+public partial class ArchetypeFormatter : IMessagePackFormatter<Archetype?>
 {
     /// <inheritdoc cref="IMessagePackFormatter{T}.Serialize"/>
-    public void Serialize(ref MessagePackWriter writer, Archetype value, MessagePackSerializerOptions options)
+    public void Serialize(ref MessagePackWriter writer, Archetype? value, MessagePackSerializerOptions options)
     {
+        if (value is null)
+        {
+            writer.WriteNil();
+            return;
+        }
+
         // Setup formatters
         var types = value.Signature;
         var chunks = value.Chunks;
@@ -387,8 +433,13 @@ public partial class ArchetypeFormatter : IMessagePackFormatter<Archetype>
     }
 
     /// <inheritdoc cref="IMessagePackFormatter{T}.Deserialize"/>
-    public Archetype Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
+    public Archetype? Deserialize(ref MessagePackReader reader, MessagePackSerializerOptions options)
     {
+        if (reader.TryReadNil())
+        {
+            return null;
+        }
+
 
         var chunkFormatter = options.Resolver.GetFormatter<Chunk>() as ChunkFormatter;
 
